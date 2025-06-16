@@ -1,15 +1,3 @@
-/**
- * Steps:
- *
- * 	1. Fill screen with mostly white pixels, and a few 'anchor' points
- * 	2. Add anchor points to list of numbers, which will just be the index of where that anchor point lives in the points array
- * 	3. For each anchor point, pop it from the list and retrieve its neighbours and decide whether to make those anchor points, but with a lower priority
- * 		- Anchor points can only affect neighbours with a lower priority than themselves. Meaning if they find an anchor point with prio 2 and they are
- * 			prio 4, they won't accidentally overwrite that point.
- * 	4. Repeat until no more anchor points are added
- *
- */
-
 import alea from 'alea'
 import { profiler } from './profiler'
 
@@ -37,6 +25,20 @@ type Point = {
 	parentAnchorDistance: number,
 
 	neighbours: number[]
+}
+
+type Config = {
+	anchors: number,
+	spread: number,
+	brightness: number,
+	smoothing: number,
+}
+
+const config: Config = {
+	anchors: 0,
+	spread: 0,
+	brightness: 0,
+	smoothing: 0,
 }
 
 function random() {
@@ -100,6 +102,10 @@ function initScreen(screen: Screen): Point[] {
 
 function bloom(points: Point[], anchorPoint: Point) {
 	let bloomQueue: Point[] = [anchorPoint]
+
+	// Each anchor point decides on a random spread
+	const mySpread = random() * config.spread
+
 	while (bloomQueue.length > 0) {
 		const current = bloomQueue.shift()
 
@@ -114,15 +120,15 @@ function bloom(points: Point[], anchorPoint: Point) {
 		for (const n of neighbourLocations) {
 			const neighbourPoint = points[n]
 
-			if (neighbourPoint.parentAnchorDistance > spread) return
+			if (neighbourPoint.parentAnchorDistance > mySpread) return
 
 			// If the neighbour has a higher or equal priority than me, i cant modify it
 			if (neighbourPoint.priority >= myPriority) {
 				continue
 			}
 
-			// Probability moves down at a steady rate
-			const probability = myPriority * (1 / spread)
+			// modulate the probability
+			const probability = myPriority * (1 / mySpread)
 
 			const rn = random()
 
@@ -130,7 +136,7 @@ function bloom(points: Point[], anchorPoint: Point) {
 			if (rn < probability) {
 				neighbourPoint.priority = myPriority - 1
 
-				let nextV = (current.value + probability) * brightness
+				let nextV = (current.value + probability) * config.brightness
 
 				if (nextV >= 0.9) nextV = neighbourPoint.value
 
@@ -174,20 +180,27 @@ function smooth(points: Point[]) {
 	}
 }
 
+function assert<T>(value: any, err: string): asserts value is NonNullable<T> {
+	if (!value) throw new Error(err)
+}
 
+export function generate(canvasId: string, conf: Config) {
+	config.anchors = conf.anchors
+	config.smoothing = conf.smoothing
+	config.brightness = conf.brightness
+	config.spread = conf.spread
 
-export function generate(canvasId: string) {
 	const appProfiler = profiler.register("App")
 
 	profiler.start(appProfiler)
 
 	const canvas = document.getElementById(canvasId) as HTMLCanvasElement
 
-	if (!canvas) return;
+	assert(canvas, "Canvas not found")
 
 	const context = canvas.getContext("2d")
 
-	if (!context) return;
+	assert(context, "Context not found")
 
 	canvas.width = canvas.clientWidth
 	canvas.height = canvas.clientHeight
@@ -206,11 +219,6 @@ export function generate(canvasId: string) {
 	profiler.logAllAndRelease()
 }
 
-const numAnchors = 70
-const smoothN = 500
-const brightness = 0.3
-const spread = 40
-
 function run(screen: Screen) {
 	const points = initScreen(screen)
 
@@ -218,15 +226,17 @@ function run(screen: Screen) {
 	const smoothingFnProfiler = profiler.register("Smoothing fn")
 	const drawFn = profiler.register("Draw fn")
 
+	console.log("Running...")
+
 	profiler.start(anchorLoopProfiler)
-	for (let i = 0; i < numAnchors; i++) {
+	for (let i = 0; i < config.anchors; i++) {
 		let randomAnchor = Math.floor(rnd.next() * points.length)
 		const anchorPoint = points[randomAnchor]
 
 		// Priority directly maps to spread, because each time we 
 		// spread out from a point, we reduce the neighbour point's priority.
 		// Meaning once we get to priority zero for an anchor, we can just stop 
-		anchorPoint.priority = spread
+		anchorPoint.priority = config.spread
 		anchorPoint.value = random()
 
 		bloom(points, anchorPoint)
@@ -234,7 +244,7 @@ function run(screen: Screen) {
 	profiler.stop(anchorLoopProfiler)
 
 	profiler.start(smoothingFnProfiler)
-	for (let i = 0; i < smoothN; i++) {
+	for (let i = 0; i < config.smoothing; i++) {
 		smooth(points)
 	}
 	profiler.stop(smoothingFnProfiler)
