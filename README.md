@@ -1,39 +1,52 @@
-# sv
+# Noise generator using html5 canvas
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+Small project to see if I could write some kind of noise generation algorithm from scratch.
 
-## Creating a project
+The idea was to work from first principles, and try to make something, regardless of how naive, without reading about how actual noise is generated.
 
-If you're seeing this, you've probably already done this step. Congrats!
+This works, though it is very slow.
 
-```bash
-# create a new project in the current directory
-npx sv create
+## Algorithm
 
-# create a new project in my-app
-npx sv create my-app
+The idea was to create a kind of 'bloom' effect, where random central points are placed and then noise is generated outward from each.
+
+Pseudocode:
+
+```
+    // Make anchors
+    Generate random anchor points throughout the noise array
+
+    // Bloom out from anchor point
+    For each anchor point
+        Get its neighbours (top, left, bottom, right)
+            For each neighbour
+                Generate neighbour's noise value relative to current anchor's noise value
+                Make neighbour an anchor itself and add to anchor queu
+                Continue
+            Loop until no anchor points left
+
+    // Smooth all points
+    For each point on screen
+        Get its neighbours values
+        Compute average of those values
+        Set point = average * smoothFactor
+
+    Render all points
+                
 ```
 
-## Developing
+There are some properties that can be used to configure the output
 
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
+- numAnchors: how many anchors to generate (anchor loop is the bottleneck so higher values will make your browser sad) 
+- bloomFactor: controls the gradient between an anchor point and its neighbour
+- maxDistance: controls how far out from the initial anchor point a bloom can go
+- smoothN: how many smoothing passes to do
 
-```bash
-npm run dev
+## Examples
 
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
-```
+Here are some maps the algorithm has generated
 
-## Building
-
-To create a production version of your app:
-
-```bash
-npm run build
-```
-
-You can preview the production build with `npm run preview`.
-
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
-# canvas-noise
+![1](./maps/1.png)
+![2](./maps/2.png)
+![3](./maps/3.png)
+![4](./maps/4.png)

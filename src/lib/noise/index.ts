@@ -112,7 +112,7 @@ function bloom(points: Point[], anchorPoint: Point) {
 		for (const n of neighbourLocations) {
 			const neighbourPoint = points[n]
 
-			if (neighbourPoint.parentAnchorDistance > maxRecursion) return
+			if (neighbourPoint.parentAnchorDistance > maxDistance) return
 
 			// If the neighbour has a higher or equal priority than me, i cant modify it
 			if (neighbourPoint.priority >= myPriority) {
@@ -171,7 +171,7 @@ function smooth(points: Point[]) {
 	const newValues = new Float32Array(points.length);
 	for (let p of points) {
 		const sum = p.neighbours.reduce((prev, current) => prev + points[current].value, 0);
-		newValues[p.index] = (sum / p.neighbours.length) * smoothingFactor;
+		newValues[p.index] = sum / p.neighbours.length;
 	}
 
 	// Update values in a separate loop to avoid race-like issues
@@ -213,10 +213,9 @@ export function generate(canvasId: string) {
 	profiler.logAllAndRelease()
 }
 
-const numAnchors = 20
+const numAnchors = 40
 const smoothN = 400
-const maxRecursion = 300
-const smoothingFactor = 1
+const maxDistance = 30
 const bloomFactor = 0.2
 
 function run(screen: Screen) {
