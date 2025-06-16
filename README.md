@@ -6,6 +6,8 @@ The idea was to work from first principles, and try to make something, regardles
 
 This works, though it is very slow.
 
+**You should almost definitely keep your canvas size small. Like, around 200x200. Really. Like really.**
+
 ## Algorithm
 
 The idea was to create a kind of 'bloom' effect, where random central points are placed and then noise is generated outward from each.
@@ -38,9 +40,23 @@ Pseudocode:
 There are some properties that can be used to configure the output
 
 - numAnchors: how many anchors to generate (anchor loop is the bottleneck so higher values will make your browser sad) 
-- bloomFactor: controls the gradient between an anchor point and its neighbour
-- maxDistance: controls how far out from the initial anchor point a bloom can go
-- smoothN: how many smoothing passes to do
+- brightness: controls how bright a bloom will look. lower numbers result in much darker blooms
+- smoothN: how many smoothing passes to do - lower values will create harder edges and patterns
+- spread: controls bloom spread radius - (this will also make your browser cry)
+
+
+You can achieve relatively fast generation, with ok output by keeping your num anchors < 90 & your spread < 50.
+
+Then using the brightness and smoothN properties to tweak the output.
+
+Here's an example of some properties that worked well for me:
+
+```
+const numAnchors = 70
+const smoothN = 500
+const brightness = 0.3
+const spread = 40
+```
 
 ## Examples
 

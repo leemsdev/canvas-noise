@@ -109,10 +109,12 @@ function bloom(points: Point[], anchorPoint: Point) {
 
 		const neighbourLocations = current.neighbours
 
+		if (myPriority == 0) break;
+
 		for (const n of neighbourLocations) {
 			const neighbourPoint = points[n]
 
-			if (neighbourPoint.parentAnchorDistance > maxDistance) return
+			if (neighbourPoint.parentAnchorDistance > spread) return
 
 			// If the neighbour has a higher or equal priority than me, i cant modify it
 			if (neighbourPoint.priority >= myPriority) {
@@ -120,7 +122,7 @@ function bloom(points: Point[], anchorPoint: Point) {
 			}
 
 			// Probability moves down at a steady rate
-			const probability = myPriority * (1 / levels)
+			const probability = myPriority * (1 / spread)
 
 			const rn = random()
 
@@ -128,9 +130,7 @@ function bloom(points: Point[], anchorPoint: Point) {
 			if (rn < probability) {
 				neighbourPoint.priority = myPriority - 1
 
-				// Multiplying by the probability here will scale down whatever alpha we get 
-				// The randomness also adds more variation
-				let nextV = (current.value + probability) * bloomFactor
+				let nextV = (current.value + probability) * brightness
 
 				if (nextV >= 0.9) nextV = neighbourPoint.value
 
@@ -139,17 +139,11 @@ function bloom(points: Point[], anchorPoint: Point) {
 				// Tell it that it is 1 further away from my parent anchor	
 				neighbourPoint.parentAnchorDistance = current.parentAnchorDistance + 1
 
-				// bloom recursively
 				bloomQueue.push(neighbourPoint)
 			}
 		}
 	}
 }
-
-// Levels maps to the number of passes we do
-// plus the highest possible priority, which is assigned to the
-// first anchor points
-const levels = 60
 
 function drawScreen(points: Point[], screen: Screen) {
 	screen.context.fillStyle = "rgba(255, 255, 255, 1)"
@@ -209,14 +203,13 @@ export function generate(canvasId: string) {
 	run(screen)
 
 	profiler.stop(appProfiler)
-
 	profiler.logAllAndRelease()
 }
 
-const numAnchors = 40
-const smoothN = 400
-const maxDistance = 30
-const bloomFactor = 0.2
+const numAnchors = 70
+const smoothN = 500
+const brightness = 0.3
+const spread = 40
 
 function run(screen: Screen) {
 	const points = initScreen(screen)
@@ -230,7 +223,10 @@ function run(screen: Screen) {
 		let randomAnchor = Math.floor(rnd.next() * points.length)
 		const anchorPoint = points[randomAnchor]
 
-		anchorPoint.priority = levels
+		// Priority directly maps to spread, because each time we 
+		// spread out from a point, we reduce the neighbour point's priority.
+		// Meaning once we get to priority zero for an anchor, we can just stop 
+		anchorPoint.priority = spread
 		anchorPoint.value = random()
 
 		bloom(points, anchorPoint)
