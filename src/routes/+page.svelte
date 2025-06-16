@@ -62,6 +62,7 @@
 	:global(html, body) {
 		padding: 0;
 		margin: 0;
+		font-family: Arial, Helvetica, sans-serif;
 	}
 
 	main {
@@ -91,8 +92,8 @@
 
 	canvas {
 		background-color: white;
-		width: 500px;
-		height: 500px;
+		width: 100px;
+		height: 100px;
 	}
 
 	h1,
@@ -117,6 +118,7 @@
 		color: white;
 		outline: rgba(0, 25, 50, 1);
 		border: none;
+		border-radius: 15px;
 	}
 
 	button:hover {

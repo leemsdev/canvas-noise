@@ -19,11 +19,7 @@ type Point = {
 	priority: number // priority zero means not an anchor point
 	location: Vec2,
 	value: number,
-	index: number,
-
-	// We use the distance from the parent anchor to control the alpha
 	parentAnchorDistance: number,
-
 	neighbours: number[]
 }
 
@@ -34,11 +30,13 @@ type Config = {
 	smoothing: number,
 }
 
-const config: Config = {
-	anchors: 0,
-	spread: 0,
-	brightness: 0,
-	smoothing: 0,
+type State = {
+	points: Point[],
+
+	// We iterate over typed arrays, as it is faster.
+	// Each number in this array will refer to a specific point
+	pointMap: Uint32Array,
+	config: Config
 }
 
 function random() {
@@ -76,7 +74,7 @@ function getMyNeighboursLocations(screen: Screen, point: Vec2): number[] {
 			continue
 		}
 
-		// It'sreally important we do x * screen.height + y here, because x is the outtermost part of the
+		// It's really important we do x * screen.height + y here, because x is the outtermost part of the
 		// init screen loop
 		let neighbourIndex = (neighbour.x * screen.height) + neighbour.y
 
@@ -86,75 +84,11 @@ function getMyNeighboursLocations(screen: Screen, point: Vec2): number[] {
 	return neighbours
 }
 
-function initScreen(screen: Screen): Point[] {
-	let points: Point[] = []
-
-	for (let x = 0; x < screen.width; x++) {
-		for (let y = 0; y < screen.height; y++) {
-			let index = points.length
-			let location = { x, y }
-			points.push({ location: { x, y }, priority: 0, value: 1, index, parentAnchorDistance: 1, neighbours: getMyNeighboursLocations(screen, location) })
-		}
-	}
-
-	return points
-}
-
-function bloom(points: Point[], anchorPoint: Point) {
-	let bloomQueue: Point[] = [anchorPoint]
-
-	// Each anchor point decides on a random spread
-	const mySpread = random() * config.spread
-
-	while (bloomQueue.length > 0) {
-		const current = bloomQueue.shift()
-
-		if (!current) break
-
-		const myPriority = current.priority
-
-		const neighbourLocations = current.neighbours
-
-		if (myPriority == 0) break;
-
-		for (const n of neighbourLocations) {
-			const neighbourPoint = points[n]
-
-			if (neighbourPoint.parentAnchorDistance > mySpread) return
-
-			// If the neighbour has a higher or equal priority than me, i cant modify it
-			if (neighbourPoint.priority >= myPriority) {
-				continue
-			}
-
-			// modulate the probability
-			const probability = myPriority * (1 / mySpread)
-
-			const rn = random()
-
-			// I should modify and set it as an anchor point
-			if (rn < probability) {
-				neighbourPoint.priority = myPriority - 1
-
-				let nextV = (current.value + probability) * config.brightness
-
-				if (nextV >= 0.9) nextV = neighbourPoint.value
-
-				neighbourPoint.value = nextV
-
-				// Tell it that it is 1 further away from my parent anchor	
-				neighbourPoint.parentAnchorDistance = current.parentAnchorDistance + 1
-
-				bloomQueue.push(neighbourPoint)
-			}
-		}
-	}
-}
-
-function drawScreen(points: Point[], screen: Screen) {
+function drawScreen(state: State, screen: Screen) {
 	screen.context.fillStyle = "rgba(255, 255, 255, 1)"
 	screen.context.clearRect(0, 0, screen.width, screen.height)
-	for (const p of points) {
+
+	for (const p of state.points) {
 		const alpha = 1 - (1 * p.value)
 
 		screen.context.fillStyle = `rgba(0, 0, 0, ${alpha})`
@@ -167,11 +101,16 @@ function drawScreen(points: Point[], screen: Screen) {
 }
 
 // Average each point out based on its neighbours
-function smooth(points: Point[]) {
-	const newValues = new Float32Array(points.length);
-	for (let p of points) {
+function smooth(state: State) {
+	const newValues = new Float32Array(state.points.length);
+	const pointMap = state.pointMap
+	const points = state.points
+
+	for (let i of pointMap) {
+		const p = points[i]
+
 		const sum = p.neighbours.reduce((prev, current) => prev + points[current].value, 0);
-		newValues[p.index] = sum / p.neighbours.length;
+		newValues[i] = sum / p.neighbours.length;
 	}
 
 	// Update values in a separate loop to avoid race-like issues
@@ -184,12 +123,113 @@ function assert<T>(value: any, err: string): asserts value is NonNullable<T> {
 	if (!value) throw new Error(err)
 }
 
-export function generate(canvasId: string, conf: Config) {
-	config.anchors = conf.anchors
-	config.smoothing = conf.smoothing
-	config.brightness = conf.brightness
-	config.spread = conf.spread
+function bloomFrom(startPosition: number, state: State) {
+	let bloomQueue: number[] = [startPosition]
 
+	// setup anchor point
+	state.points[startPosition].priority = state.config.spread
+	state.points[startPosition].value = random()
+
+	// Each anchor point decides on a random spread
+	const mySpread = random() * state.config.spread
+
+	while (bloomQueue.length > 0) {
+		const position = bloomQueue.shift()
+
+		if (!position) continue
+
+		const current = state.points[position]
+
+		if (!current) break
+
+		const myPriority = current.priority
+		const neighbourLocations = current.neighbours
+
+		if (myPriority == 0) break;
+
+		for (const n of neighbourLocations) {
+			const neighbourPoint = state.points[n]
+
+			if (neighbourPoint.parentAnchorDistance > mySpread) return
+
+			// If the neighbour has a higher or equal priority than me, i cant modify it
+			if (neighbourPoint.priority >= myPriority) {
+				continue
+			}
+
+			// modulate the probability
+			const probability = myPriority / mySpread
+
+			const rn = random()
+
+			// I should modify and set it as an anchor point
+			if (rn < probability) {
+				neighbourPoint.priority = myPriority - 1
+
+				let nextV = (current.value + probability) * state.config.brightness
+
+				if (nextV >= 0.9) nextV = neighbourPoint.value
+
+				neighbourPoint.value = nextV
+
+				// Tell it that it is 1 further away from my parent anchor	
+				neighbourPoint.parentAnchorDistance = current.parentAnchorDistance + 1
+
+				bloomQueue.push(n)
+			}
+		}
+	}
+}
+
+function initScreen(screen: Screen): [Point[], Uint32Array] {
+	let points: Point[] = []
+	let pointMap: Uint32Array = new Uint32Array(screen.width * screen.height)
+
+	for (let x = 0; x < screen.width; x++) {
+		for (let y = 0; y < screen.height; y++) {
+			let index = points.length
+			let location = { x, y }
+			points.push({ location: { x, y }, priority: 0, value: 1, parentAnchorDistance: 1, neighbours: getMyNeighboursLocations(screen, location) })
+			pointMap[index] = index
+		}
+	}
+
+	return [points, pointMap]
+}
+
+function run(config: Config, screen: Screen) {
+	const [points, pointMap] = initScreen(screen)
+
+	let state: State = {
+		points,
+		pointMap,
+		config,
+	}
+
+	const anchorLoopProfiler = profiler.register("Anchor loop")
+	const smoothingFnProfiler = profiler.register("Smoothing fn")
+	const drawFn = profiler.register("Draw fn")
+
+	profiler.start(anchorLoopProfiler)
+	for (let i = 0; i < config.anchors; i++) {
+		let anchorPosition = Math.floor(random() * pointMap.length)
+
+		bloomFrom(anchorPosition, state)
+	}
+	profiler.stop(anchorLoopProfiler)
+
+	profiler.start(smoothingFnProfiler)
+	for (let i = 0; i < config.smoothing; i++) {
+		smooth(state)
+	}
+	profiler.stop(smoothingFnProfiler)
+
+	profiler.start(drawFn)
+	drawScreen(state, screen)
+	profiler.stop(drawFn)
+}
+
+export function generate(canvasId: string, conf: Config) {
 	const appProfiler = profiler.register("App")
 
 	profiler.start(appProfiler)
@@ -213,43 +253,10 @@ export function generate(canvasId: string, conf: Config) {
 		...dimensions
 	}
 
-	run(screen)
+	run(conf, screen)
 
 	profiler.stop(appProfiler)
 	profiler.logAllAndRelease()
 }
 
-function run(screen: Screen) {
-	const points = initScreen(screen)
 
-	const anchorLoopProfiler = profiler.register("Anchor loop")
-	const smoothingFnProfiler = profiler.register("Smoothing fn")
-	const drawFn = profiler.register("Draw fn")
-
-	console.log("Running...")
-
-	profiler.start(anchorLoopProfiler)
-	for (let i = 0; i < config.anchors; i++) {
-		let randomAnchor = Math.floor(rnd.next() * points.length)
-		const anchorPoint = points[randomAnchor]
-
-		// Priority directly maps to spread, because each time we 
-		// spread out from a point, we reduce the neighbour point's priority.
-		// Meaning once we get to priority zero for an anchor, we can just stop 
-		anchorPoint.priority = config.spread
-		anchorPoint.value = random()
-
-		bloom(points, anchorPoint)
-	}
-	profiler.stop(anchorLoopProfiler)
-
-	profiler.start(smoothingFnProfiler)
-	for (let i = 0; i < config.smoothing; i++) {
-		smooth(points)
-	}
-	profiler.stop(smoothingFnProfiler)
-
-	profiler.start(drawFn)
-	drawScreen(points, screen)
-	profiler.stop(drawFn)
-}
