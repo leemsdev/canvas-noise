@@ -6,7 +6,7 @@ The idea was to work from first principles, and try to make something, regardles
 
 This works, though it is very slow.
 
-**You should almost definitely keep your canvas size small. Like, around 200x200. Really. Like really.**
+**You should almost definitely keep your canvas size small. Like, around 200x200 **
 
 ## Algorithm
 
@@ -23,7 +23,7 @@ Pseudocode:
         Get its neighbours (top, left, bottom, right)
             For each neighbour
                 Generate neighbour's noise value relative to current anchor's noise value
-                Make neighbour an anchor itself and add to anchor queu
+                Make neighbour an anchor itself and add to anchor queue
                 Continue
             Loop until no anchor points left
 
